@@ -41,6 +41,7 @@ const allowedOrigins = [
   envVars.FRONTEND_URL,
   "http://localhost:3000",
   "http://localhost:5173",
+  "https://crm-sr-v2.vercel.app"
 ];
 
 app.use(
