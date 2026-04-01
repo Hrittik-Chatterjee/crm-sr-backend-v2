@@ -158,27 +158,34 @@ const getAllRegularContents = async (
     !user.roles.includes(UserRole.ADMIN) &&
     !user.roles.includes(UserRole.CONTENT_WRITER)
   ) {
-    // Content Designers: see poster/both content from businesses they are assigned to
-    if (user.roles.includes(UserRole.CONTENT_DESIGNER)) {
-      // Find all businesses where this user is assigned as CD
-      const assignedBusinesses = await Business.find(
-        { assignedCD: user.id },
-        { _id: 1 }
-      ).lean();
+    const isCD = user.roles.includes(UserRole.CONTENT_DESIGNER);
+    const isVE = user.roles.includes(UserRole.VIDEO_EDITOR);
+
+    if (isCD || isVE) {
+      // 1. Build a dynamic query to find businesses where they are assigned as CD and/or VE
+      const businessQuery: any = { $or: [] };
+      if (isCD) businessQuery.$or.push({ assignedCD: user.id });
+      if (isVE) businessQuery.$or.push({ assignedVE: user.id });
+
+      const assignedBusinesses = await Business.find(businessQuery, { _id: 1 }).lean();
       const businessIds = assignedBusinesses.map((b) => b._id);
+      
+      // 2. Set the allowed content types based on their roles
+      const allowedContentTypes = ["both"];
+      if (isCD) allowedContentTypes.push("poster");
+      if (isVE) allowedContentTypes.push("video");
+
       filter.business = { $in: businessIds };
-      filter.contentType = { $in: ["poster", "both"] };
-    }
-    // Video Editors: see video/both content from businesses they are assigned to
-    else if (user.roles.includes(UserRole.VIDEO_EDITOR)) {
-      // Find all businesses where this user is assigned as VE
-      const assignedBusinesses = await Business.find(
-        { assignedVE: user.id },
-        { _id: 1 }
-      ).lean();
-      const businessIds = assignedBusinesses.map((b) => b._id);
-      filter.business = { $in: businessIds };
-      filter.contentType = { $in: ["video", "both"] };
+      
+      // If a specific contentType was requested in queryParams, ensure they are allowed to see it
+      if (filter.contentType) {
+        if (!allowedContentTypes.includes(filter.contentType)) {
+          // If they request a type they can't access, force it to match nothing
+          filter.contentType = { $in: [] };
+        }
+      } else {
+        filter.contentType = { $in: allowedContentTypes };
+      }
     }
   }
 
